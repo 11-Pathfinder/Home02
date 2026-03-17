@@ -182,21 +182,19 @@ def load_ofsted_data(ofsted_path):
     print(f"  URN column: '{urn_col}', Rating column: '{rating_col}'")
     print(f"  Sample rating values: {df[rating_col].dropna().unique()[:10]}")
 
-    # Look for fallback columns for schools whose last graded inspection was
-    # pre-OEIF (before September 2019) — their "Latest OEIF overall effectiveness"
-    # will be blank, but "Previous full inspection overall effectiveness" preserves
-    # the grade from their last Section 5 inspection.
-    fallback_col = None
+    # Look for the "Ungraded inspection overall outcome" column — this contains
+    # Section 8 results like "School remains Good" for schools that haven't had
+    # a full graded (Section 5) inspection under the OEIF framework.
+    ungraded_col = None
     for candidate in [
-        "Previous full inspection overall effectiveness",
-        "Previous inspection overall effectiveness",
-        "Previous overall effectiveness",
+        "Ungraded inspection overall outcome",
+        "Ungraded inspection outcome",
     ]:
         if candidate in df.columns:
-            fallback_col = candidate
+            ungraded_col = candidate
             break
-    if fallback_col:
-        print(f"  Fallback rating column: '{fallback_col}'")
+    if ungraded_col:
+        print(f"  Ungraded outcome column: '{ungraded_col}'")
 
     # Map numeric ratings to text; if already text, normalize them
     rating_map = {
@@ -220,14 +218,22 @@ def load_ofsted_data(ofsted_path):
         "OfstedRating": df[rating_col].map(rating_map),
     })
 
-    # Fill missing ratings from the fallback column (covers pre-OEIF schools
-    # and Section 8 confirmations where the primary column is blank)
-    if fallback_col is not None:
-        fallback_ratings = df[fallback_col].map(rating_map)
+    # Fill missing ratings from the ungraded outcome column (covers schools
+    # whose last inspection was a Section 8 that confirmed their existing grade,
+    # e.g. "School remains Good", "School remains Outstanding")
+    if ungraded_col is not None:
+        ungraded_map = {
+            "School remains Good": "Good",
+            "School remains Good (Concerns) - S5 Next": "Good",
+            "School remains Good (Improving) - S5 Next": "Good",
+            "School remains Outstanding": "Outstanding",
+            "School remains Outstanding (Concerns) - S5 Next": "Outstanding",
+        }
+        fallback_ratings = df[ungraded_col].map(ungraded_map)
         missing = result["OfstedRating"].isna()
-        filled = missing.sum() - (result.loc[missing, "OfstedRating"].fillna(fallback_ratings[missing]).isna().sum())
+        filled = missing.sum() - fallback_ratings[missing].isna().sum()
         result.loc[missing, "OfstedRating"] = fallback_ratings[missing]
-        print(f"  Filled {int(filled)} ratings from fallback column")
+        print(f"  Filled {int(filled)} ratings from ungraded inspection outcomes")
 
     # Keep only the latest inspection per school (highest index = most recent)
     result = result.dropna(subset=["OfstedRating", "URN"])
