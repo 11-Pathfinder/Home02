@@ -144,11 +144,18 @@ def load_ofsted_data(ofsted_path):
 
     print("Loading Ofsted inspection data...")
 
-    # The Ofsted MI CSV has 2 metadata rows before the actual column headers.
-    # Row 0: title, Row 1: description, Row 2: actual headers
+    # Auto-detect the header row by finding the row containing "URN".
+    # The Ofsted MI CSV may have 0-2 metadata rows before the actual headers.
+    df = None
     for enc in ["utf-8-sig", "cp1252", "latin-1"]:
         try:
-            df = pd.read_csv(ofsted_path, encoding=enc, skiprows=2, low_memory=False)
+            raw = pd.read_csv(ofsted_path, encoding=enc, nrows=10, header=None)
+            skip = 0
+            for i, row in raw.iterrows():
+                if row.astype(str).str.contains("URN", case=False).any():
+                    skip = i
+                    break
+            df = pd.read_csv(ofsted_path, encoding=enc, skiprows=skip, low_memory=False)
             break
         except UnicodeDecodeError:
             continue
@@ -277,7 +284,10 @@ def merge_data(schools_df, ofsted_df):
             ofsted_df[["URN", "OfstedRating"]], on="URN", how="left"
         )
 
+    not_inspected_count = schools_df["OfstedRating"].isna().sum()
     schools_df["OfstedRating"] = schools_df["OfstedRating"].fillna("Not yet inspected")
+    if not_inspected_count > 0:
+        print(f"  {not_inspected_count} schools have no Ofsted rating after merge")
     return schools_df
 
 

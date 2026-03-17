@@ -184,7 +184,17 @@ def download_ofsted_csv(force=False, manual_url=None):
     resp = requests.get(best_link, timeout=60)
     resp.raise_for_status()
     output_path.write_bytes(resp.content)
-    print(f"Downloaded Ofsted data ({len(resp.content) / 1e6:.1f} MB)")
+    size_mb = len(resp.content) / 1e6
+    print(f"Downloaded Ofsted data ({size_mb:.1f} MB)")
+
+    # Validate: the cumulative file should be several MB with thousands of rows
+    row_count = resp.text.count('\n')
+    if row_count < 1000:
+        print(f"  WARNING: Downloaded file has only ~{row_count} rows.")
+        print("  This may be a monthly file rather than the cumulative file.")
+        print("  Schools inspected years ago may be missing.")
+        print(f"  Try specifying the URL manually with --ofsted-url")
+
     return output_path
 
 
