@@ -229,7 +229,7 @@ def load_ofsted_data(ofsted_path):
             "School remains Outstanding": "Outstanding",
             "School remains Outstanding (Concerns) - S5 Next": "Outstanding",
         }
-        fallback_ratings = df[ungraded_col].map(ungraded_map)
+        fallback_ratings = df[ungraded_col].str.strip().map(ungraded_map)
         missing = result["OfstedRating"].isna()
         filled = missing.sum() - fallback_ratings[missing].isna().sum()
         result.loc[missing, "OfstedRating"] = fallback_ratings[missing]
@@ -250,6 +250,9 @@ def merge_data(schools_df, ofsted_df):
         # No Ofsted data — mark all as "Not yet inspected"
         schools_df["OfstedRating"] = schools_df["OfstedRating"].fillna("Not yet inspected")
         return schools_df
+
+    # Treat "Not yet inspected" from GIAS as missing — Ofsted MI may have a real rating
+    schools_df["OfstedRating"] = schools_df["OfstedRating"].replace("Not yet inspected", pd.NA)
 
     # Ensure URN types match for merge
     schools_df["URN"] = pd.to_numeric(schools_df["URN"], errors="coerce").astype("Int64")
