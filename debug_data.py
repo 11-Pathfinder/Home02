@@ -84,8 +84,26 @@ def inspect_ofsted():
     else:
         print("\nNo 'overall effectiveness' column found!")
 
+    # Check for fallback columns (previous inspection ratings)
+    fallback_cols = [c for c in df.columns if "previous" in c.lower() and ("overall" in c.lower() or "effectiveness" in c.lower())]
+    if fallback_cols:
+        print(f"\nFallback (previous inspection) columns: {fallback_cols}")
+        for col in fallback_cols:
+            vals = df[col].dropna()
+            print(f"  '{col}' — {len(vals)} non-null values")
+            print(f"  Value counts:\n{vals.value_counts().head(10).to_string()}")
+
     print(f"\nURN dtype: {df['URN'].dtype}")
     print(f"URN sample: {df['URN'].head(3).tolist()}")
+
+    # Check for Joseph Hood Primary School (URN 102634)
+    joseph_hood = df[pd.to_numeric(df['URN'], errors='coerce') == 102634]
+    if len(joseph_hood) > 0:
+        print(f"\n*** Joseph Hood Primary School (URN 102634) ***")
+        print(joseph_hood.iloc[0].to_string())
+    else:
+        print(f"\n*** Joseph Hood (URN 102634) NOT found in Ofsted data ***")
+
     print(f"\nSample row:")
     print(df.iloc[0].to_string())
 

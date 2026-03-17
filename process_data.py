@@ -182,6 +182,22 @@ def load_ofsted_data(ofsted_path):
     print(f"  URN column: '{urn_col}', Rating column: '{rating_col}'")
     print(f"  Sample rating values: {df[rating_col].dropna().unique()[:10]}")
 
+    # Look for fallback columns for schools whose last graded inspection was
+    # pre-OEIF (before September 2019) — their "Latest OEIF overall effectiveness"
+    # will be blank, but "Previous full inspection overall effectiveness" preserves
+    # the grade from their last Section 5 inspection.
+    fallback_col = None
+    for candidate in [
+        "Previous full inspection overall effectiveness",
+        "Previous inspection overall effectiveness",
+        "Previous overall effectiveness",
+    ]:
+        if candidate in df.columns:
+            fallback_col = candidate
+            break
+    if fallback_col:
+        print(f"  Fallback rating column: '{fallback_col}'")
+
     # Map numeric ratings to text; if already text, normalize them
     rating_map = {
         1: "Outstanding",
@@ -203,6 +219,15 @@ def load_ofsted_data(ofsted_path):
         "URN": pd.to_numeric(df[urn_col], errors="coerce"),
         "OfstedRating": df[rating_col].map(rating_map),
     })
+
+    # Fill missing ratings from the fallback column (covers pre-OEIF schools
+    # and Section 8 confirmations where the primary column is blank)
+    if fallback_col is not None:
+        fallback_ratings = df[fallback_col].map(rating_map)
+        missing = result["OfstedRating"].isna()
+        filled = missing.sum() - (result.loc[missing, "OfstedRating"].fillna(fallback_ratings[missing]).isna().sum())
+        result.loc[missing, "OfstedRating"] = fallback_ratings[missing]
+        print(f"  Filled {int(filled)} ratings from fallback column")
 
     # Keep only the latest inspection per school (highest index = most recent)
     result = result.dropna(subset=["OfstedRating", "URN"])
