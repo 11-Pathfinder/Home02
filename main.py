@@ -9,6 +9,7 @@ Usage:
     python3 main.py --refresh        # Force re-download of data
     python3 main.py --radius 1000    # Custom catchment radius (meters)
     python3 main.py --output map.html  # Custom output file
+    python3 main.py --check "Joseph Hood"  # Check a school's rating
 """
 
 import argparse
@@ -41,13 +42,25 @@ def main():
         default=None,
         help="Output HTML file path (default: output/london_schools_map.html)",
     )
+    parser.add_argument(
+        "--check",
+        type=str,
+        default=None,
+        help="Check a school's rating by name (partial, case-insensitive match)",
+    )
+    parser.add_argument(
+        "--ofsted-url",
+        type=str,
+        default=None,
+        help="Manually specify the Ofsted CSV download URL",
+    )
     args = parser.parse_args()
 
     # Step 1: Download data
     print("=" * 60)
     print("Step 1: Fetching data...")
     print("=" * 60)
-    gias_path, ofsted_path = fetch_all(force=args.refresh)
+    gias_path, ofsted_path = fetch_all(force=args.refresh, ofsted_url=args.ofsted_url)
 
     # Step 2: Process data
     print("\n" + "=" * 60)
@@ -64,6 +77,37 @@ def main():
         radius_m=args.radius,
         output_path=args.output,
     )
+
+    # Check a specific school if requested
+    if args.check:
+        print("\n" + "=" * 60)
+        print(f"Checking schools matching: '{args.check}'")
+        print("=" * 60)
+        mask = schools_df["Name"].str.contains(args.check, case=False, na=False)
+        matches = schools_df[mask]
+        if matches.empty:
+            print(f"  No schools found matching '{args.check}'")
+        else:
+            for _, row in matches.iterrows():
+                print(f"  URN: {row['URN']}")
+                print(f"  Name: {row['Name']}")
+                print(f"  Borough: {row['Borough']}")
+                print(f"  Ofsted: {row['OfstedRating']}")
+                print(f"  Address: {row.get('Address', 'N/A')}")
+                print()
+        # Also check raw Ofsted data
+        if ofsted_path and Path(ofsted_path).exists():
+            import pandas as pd
+            from process_data import load_ofsted_data
+            raw_ofsted = load_ofsted_data(ofsted_path)
+            if raw_ofsted is not None:
+                for _, row in matches.iterrows():
+                    urn = int(row["URN"])
+                    in_ofsted = raw_ofsted[raw_ofsted["URN"] == urn]
+                    if in_ofsted.empty:
+                        print(f"  !! URN {urn} ({row['Name']}) NOT found in Ofsted CSV")
+                    else:
+                        print(f"  >> URN {urn} in Ofsted CSV with rating: {in_ofsted.iloc[0]['OfstedRating']}")
 
     # Summary
     print("\n" + "=" * 60)

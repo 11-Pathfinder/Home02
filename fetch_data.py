@@ -65,11 +65,11 @@ def download_gias_csv(force=False):
     return output_path
 
 
-def download_ofsted_csv(force=False):
+def download_ofsted_csv(force=False, manual_url=None):
     """Download the Ofsted Management Information CSV.
 
-    Downloads the 'latest inspections' CSV which contains the most recent
-    inspection outcome for each school.
+    Downloads the cumulative 'state of the nation' CSV which contains the
+    latest inspection outcome for ALL schools, not just recently-inspected ones.
     """
     ensure_data_dir()
     output_path = DATA_DIR / "ofsted_inspections.csv"
@@ -78,66 +78,120 @@ def download_ofsted_csv(force=False):
         print(f"Ofsted data already cached at {output_path}")
         return output_path
 
+    # Allow manual URL override
+    if manual_url:
+        print(f"Using manually specified Ofsted URL: {manual_url}")
+        resp = requests.get(manual_url, timeout=60)
+        resp.raise_for_status()
+        output_path.write_bytes(resp.content)
+        print(f"Downloaded Ofsted data ({len(resp.content) / 1e6:.1f} MB)")
+        return output_path
+
     # Fetch the MI page to find CSV download links
     print("Fetching Ofsted Management Information page...")
     resp = requests.get(OFSTED_MI_PAGE, timeout=30)
     resp.raise_for_status()
 
-    # Look for CSV links in the page content
     import re
 
-    # Find links to CSV files on assets.publishing.service.gov.uk
-    csv_links = re.findall(
+    # Extract all CSV links and their surrounding text for context
+    # Pattern: capture link text and href together
+    link_entries = re.findall(
+        r'<a[^>]*href="([^"]*\.csv[^"]*)"[^>]*>([^<]*)</a>',
+        resp.text,
+        re.IGNORECASE,
+    )
+    # Also try href before text
+    link_entries += re.findall(
+        r'href="([^"]*\.csv[^"]*)"[^>]*>([^<]*)<',
+        resp.text,
+        re.IGNORECASE,
+    )
+
+    # Normalize URLs
+    csv_entries = []
+    seen_urls = set()
+    for url, text in link_entries:
+        if url.startswith("/"):
+            url = f"https://www.gov.uk{url}"
+        if url not in seen_urls:
+            seen_urls.add(url)
+            csv_entries.append((url, text.strip()))
+
+    # Also find bare CSV links without anchor text
+    bare_links = re.findall(
         r'href="(https://assets\.publishing\.service\.gov\.uk/[^"]*\.csv[^"]*)"',
         resp.text,
     )
-
-    # Also check for links via /government/uploads pattern
-    gov_links = re.findall(
+    bare_gov = re.findall(
         r'href="(/government/uploads/[^"]*\.csv[^"]*)"', resp.text
     )
-    csv_links.extend(
-        f"https://www.gov.uk{link}" for link in gov_links
-    )
+    for link in bare_links + [f"https://www.gov.uk{l}" for l in bare_gov]:
+        if link not in seen_urls:
+            seen_urls.add(link)
+            csv_entries.append((link, ""))
 
-    # Prefer the "latest inspections" file
-    latest_link = None
-    for link in csv_links:
-        if "latest_inspection" in link.lower() or "latest inspection" in link.lower().replace("_", " "):
-            latest_link = link
+    print(f"  Found {len(csv_entries)} CSV link(s) on the MI page:")
+    for url, text in csv_entries:
+        label = text if text else "(no link text)"
+        print(f"    - {label}: {url}")
+
+    # Prioritize: prefer the cumulative "state of the nation" / "as at" file
+    # which contains ALL schools, over monthly files with only recent inspections.
+    best_link = None
+    best_reason = ""
+
+    for url, text in csv_entries:
+        combined = f"{text} {url}".lower()
+        # "State of the nation" or "as at" = cumulative file with all schools
+        if "state_of_the_nation" in combined.replace(" ", "_") or "as_at" in combined.replace(" ", "_"):
+            best_link = url
+            best_reason = "cumulative 'state of the nation' / 'as at' file"
             break
 
-    # If no "latest" found, try "most recent" or just use the largest CSV
-    if not latest_link:
-        for link in csv_links:
-            if "most_recent" in link.lower():
-                latest_link = link
+    # Fallback: look for "latest inspection" in URL or text
+    if not best_link:
+        for url, text in csv_entries:
+            combined = f"{text} {url}".lower().replace("_", " ")
+            if "latest inspection" in combined:
+                best_link = url
+                best_reason = "'latest inspection' file"
                 break
 
-    if not latest_link and csv_links:
-        # Use the first CSV link as fallback
-        latest_link = csv_links[0]
-        print(f"Warning: Could not identify 'latest inspections' CSV, using: {latest_link}")
+    # Fallback: look for "most recent"
+    if not best_link:
+        for url, text in csv_entries:
+            combined = f"{text} {url}".lower()
+            if "most_recent" in combined or "most recent" in combined:
+                best_link = url
+                best_reason = "'most recent' file"
+                break
 
-    if not latest_link:
+    # Last resort: pick the first CSV
+    if not best_link and csv_entries:
+        best_link = csv_entries[0][0]
+        best_reason = "first available CSV (fallback)"
+
+    if not best_link:
         print("ERROR: Could not find any CSV download links on the Ofsted MI page.")
-        print("You may need to manually download the CSV from:")
-        print(f"  {OFSTED_MI_PAGE}")
-        print(f"Place it at: {output_path}")
+        print("You may need to manually download the CSV and specify it with --ofsted-url.")
+        print(f"  Page: {OFSTED_MI_PAGE}")
+        print(f"  Place it at: {output_path}")
         return None
 
-    print(f"Downloading Ofsted data from: {latest_link}")
-    resp = requests.get(latest_link, timeout=60)
+    print(f"  Selected: {best_reason}")
+    print(f"Downloading Ofsted data from: {best_link}")
+    resp = requests.get(best_link, timeout=60)
     resp.raise_for_status()
     output_path.write_bytes(resp.content)
     print(f"Downloaded Ofsted data ({len(resp.content) / 1e6:.1f} MB)")
     return output_path
 
 
-def fetch_all(force=False):
+def fetch_all(force=False, ofsted_url=None):
     """Download all required data files."""
     gias_path = download_gias_csv(force=force)
-    ofsted_path = download_ofsted_csv(force=force)
+    ofsted_path = download_ofsted_csv(force=force, manual_url=ofsted_url)
     return gias_path, ofsted_path
 
 

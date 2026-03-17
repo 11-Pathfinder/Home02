@@ -104,6 +104,13 @@ def inspect_ofsted():
     else:
         print(f"\n*** Joseph Hood (URN 102634) NOT found in Ofsted data ***")
 
+    # Show file size
+    file_size = path.stat().st_size
+    print(f"\nFile size: {file_size / 1e6:.1f} MB")
+    if file_size < 1_000_000:
+        print("  WARNING: File is small — this may be a monthly file, not the cumulative one.")
+        print("  The cumulative 'state of the nation' file is typically 5-20 MB.")
+
     print(f"\nSample row:")
     print(df.iloc[0].to_string())
 
