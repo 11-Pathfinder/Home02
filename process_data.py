@@ -165,10 +165,10 @@ def load_ofsted_data(ofsted_path):
 
     rating_col = None
     for candidate in [
+        "Latest OEIF overall effectiveness",
         "Overall effectiveness",
         "OverallEffectiveness",
         "Overall Effectiveness",
-        "Overall effectiveness (number)",
     ]:
         if candidate in df.columns:
             rating_col = candidate
