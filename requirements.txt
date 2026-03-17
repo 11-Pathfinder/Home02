@@ -1,0 +1,4 @@
+folium>=0.15
+pandas>=2.0
+requests>=2.28
+pyproj>=3.6
