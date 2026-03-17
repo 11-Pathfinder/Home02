@@ -109,7 +109,7 @@ def load_gias_data(gias_path):
 
     # Standardize column names for output
     result = pd.DataFrame({
-        "URN": df["URN"],
+        "URN": pd.to_numeric(df["URN"], errors="coerce").astype("Int64"),
         "Name": df[name_col],
         "Latitude": df["Latitude"],
         "Longitude": df["Longitude"],
@@ -169,10 +169,13 @@ def load_ofsted_data(ofsted_path):
 
     if not urn_col or not rating_col:
         print(f"  Warning: Could not find URN or rating columns.")
-        print(f"  Available columns: {list(df.columns[:20])}")
+        print(f"  Available columns: {list(df.columns)}")
         return None
 
-    # Map numeric ratings to text
+    print(f"  URN column: '{urn_col}', Rating column: '{rating_col}'")
+    print(f"  Sample rating values: {df[rating_col].dropna().unique()[:10]}")
+
+    # Map numeric ratings to text; if already text, normalize them
     rating_map = {
         1: "Outstanding",
         "1": "Outstanding",
@@ -182,15 +185,21 @@ def load_ofsted_data(ofsted_path):
         "3": "Requires improvement",
         4: "Inadequate",
         "4": "Inadequate",
+        # Handle text values too (already correct labels)
+        "Outstanding": "Outstanding",
+        "Good": "Good",
+        "Requires improvement": "Requires improvement",
+        "Inadequate": "Inadequate",
     }
 
     result = pd.DataFrame({
-        "URN": df[urn_col],
+        "URN": pd.to_numeric(df[urn_col], errors="coerce"),
         "OfstedRating": df[rating_col].map(rating_map),
     })
 
     # Keep only the latest inspection per school (highest index = most recent)
-    result = result.dropna(subset=["OfstedRating"])
+    result = result.dropna(subset=["OfstedRating", "URN"])
+    result["URN"] = result["URN"].astype(int)
     result = result.drop_duplicates(subset=["URN"], keep="last")
     print(f"  Schools with ratings: {len(result)}")
 
@@ -203,6 +212,14 @@ def merge_data(schools_df, ofsted_df):
         # No Ofsted data — mark all as "Not yet inspected"
         schools_df["OfstedRating"] = schools_df["OfstedRating"].fillna("Not yet inspected")
         return schools_df
+
+    # Ensure URN types match for merge
+    schools_df["URN"] = pd.to_numeric(schools_df["URN"], errors="coerce").astype("Int64")
+    ofsted_df["URN"] = pd.to_numeric(ofsted_df["URN"], errors="coerce").astype("Int64")
+
+    # Check overlap
+    overlap = schools_df["URN"].isin(ofsted_df["URN"]).sum()
+    print(f"  URN overlap: {overlap} of {len(schools_df)} schools found in Ofsted data")
 
     # If GIAS already has ratings, prefer those; fill gaps from Ofsted MI
     if schools_df["OfstedRating"].notna().any():
