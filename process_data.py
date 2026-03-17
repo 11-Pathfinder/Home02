@@ -22,7 +22,11 @@ def _bng_to_latlng(easting, northing):
 def load_gias_data(gias_path):
     """Load and filter GIAS data to London primary schools."""
     print("Loading GIAS data...")
-    df = pd.read_csv(gias_path, encoding="utf-8-sig", low_memory=False)
+    # GIAS CSV uses Windows-1252 encoding (contains curly quotes etc.)
+    try:
+        df = pd.read_csv(gias_path, encoding="utf-8-sig", low_memory=False)
+    except UnicodeDecodeError:
+        df = pd.read_csv(gias_path, encoding="cp1252", low_memory=False)
     print(f"  Total establishments: {len(df)}")
 
     # Identify relevant columns (GIAS uses varying naming conventions)
