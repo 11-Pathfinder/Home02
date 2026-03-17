@@ -143,7 +143,10 @@ def load_ofsted_data(ofsted_path):
         return None
 
     print("Loading Ofsted inspection data...")
-    df = pd.read_csv(ofsted_path, encoding="utf-8-sig", low_memory=False)
+    try:
+        df = pd.read_csv(ofsted_path, encoding="utf-8-sig", low_memory=False)
+    except UnicodeDecodeError:
+        df = pd.read_csv(ofsted_path, encoding="cp1252", low_memory=False)
     print(f"  Total inspection records: {len(df)}")
 
     # The Ofsted MI CSV has varying column names. Try to find URN and rating.
