@@ -143,10 +143,37 @@ def load_ofsted_data(ofsted_path):
         return None
 
     print("Loading Ofsted inspection data...")
-    try:
-        df = pd.read_csv(ofsted_path, encoding="utf-8-sig", low_memory=False)
-    except UnicodeDecodeError:
-        df = pd.read_csv(ofsted_path, encoding="cp1252", low_memory=False)
+
+    # The Ofsted MI CSV has metadata/title rows before the actual headers.
+    # We need to find the row that contains "URN" to use as the header.
+    def _read_ofsted_csv(path):
+        for enc in ["utf-8-sig", "cp1252"]:
+            try:
+                raw = pd.read_csv(path, encoding=enc, header=None, low_memory=False)
+                break
+            except UnicodeDecodeError:
+                continue
+
+        # Find the row containing "URN" — that's the real header
+        header_row = None
+        for i in range(min(10, len(raw))):
+            row_vals = raw.iloc[i].astype(str).tolist()
+            if any("URN" in str(v) for v in row_vals):
+                header_row = i
+                break
+
+        if header_row is None:
+            print("  Warning: Could not find header row with 'URN'")
+            print(f"  First 5 rows:\n{raw.head()}")
+            return None
+
+        print(f"  Found header row at line {header_row}")
+        df = pd.read_csv(path, encoding=enc, header=header_row, low_memory=False)
+        return df
+
+    df = _read_ofsted_csv(ofsted_path)
+    if df is None:
+        return None
     print(f"  Total inspection records: {len(df)}")
 
     # The Ofsted MI CSV has varying column names. Try to find URN and rating.
