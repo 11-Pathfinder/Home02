@@ -5,10 +5,10 @@ Downloads school data from GIAS and Ofsted, filters to London primary schools,
 and generates an interactive HTML map with color-coded catchment areas.
 
 Usage:
-    python main.py                  # Run full pipeline
-    python main.py --refresh        # Force re-download of data
-    python main.py --radius 1000    # Custom catchment radius (meters)
-    python main.py --output map.html  # Custom output file
+    python3 main.py                  # Run full pipeline
+    python3 main.py --refresh        # Force re-download of data
+    python3 main.py --radius 1000    # Custom catchment radius (meters)
+    python3 main.py --output map.html  # Custom output file
 """
 
 import argparse
