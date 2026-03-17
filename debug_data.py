@@ -60,12 +60,34 @@ def inspect_ofsted():
         except UnicodeDecodeError:
             continue
 
-    print("First 30 lines of the raw CSV file:")
-    for i, line in enumerate(lines):
-        # Truncate long lines for readability
-        display = line.strip()[:150]
-        has_urn = " <-- URN FOUND HERE" if "URN" in line else ""
-        print(f"  Line {i}: {display}{has_urn}")
+    # Line 2 has the headers. Parse with skiprows=2
+    for enc in ["utf-8-sig", "cp1252", "latin-1"]:
+        try:
+            df = pd.read_csv(path, encoding=enc, skiprows=2, low_memory=False)
+            break
+        except UnicodeDecodeError:
+            continue
+
+    print(f"Total rows: {len(df)}")
+    print(f"\nAll columns ({len(df.columns)}):")
+    for col in df.columns:
+        print(f"  - {col}")
+
+    # Show rating-related columns
+    rating_cols = [c for c in df.columns if "overall" in c.lower() or "effectiveness" in c.lower()]
+    if rating_cols:
+        print(f"\nRating columns found: {rating_cols}")
+        for col in rating_cols:
+            vals = df[col].dropna()
+            print(f"\n  '{col}' — {len(vals)} non-null values")
+            print(f"  Value counts:\n{vals.value_counts().to_string()}")
+    else:
+        print("\nNo 'overall effectiveness' column found!")
+
+    print(f"\nURN dtype: {df['URN'].dtype}")
+    print(f"URN sample: {df['URN'].head(3).tolist()}")
+    print(f"\nSample row:")
+    print(df.iloc[0].to_string())
 
 
 if __name__ == "__main__":
