@@ -144,15 +144,16 @@ def load_ofsted_data(ofsted_path):
 
     print("Loading Ofsted inspection data...")
 
-    # Auto-detect the header row by finding the row containing "URN".
+    # Auto-detect the header row by finding the row containing "URN" as a cell.
     # The Ofsted MI CSV may have 0-2 metadata rows before the actual headers.
+    # Use word boundary \bURN\b to avoid matching substrings like "turn".
     df = None
     for enc in ["utf-8-sig", "cp1252", "latin-1"]:
         try:
             raw = pd.read_csv(ofsted_path, encoding=enc, nrows=10, header=None)
             skip = 0
             for i, row in raw.iterrows():
-                if row.astype(str).str.contains("URN", case=False).any():
+                if row.astype(str).str.strip().str.upper().eq("URN").any():
                     skip = i
                     break
             df = pd.read_csv(ofsted_path, encoding=enc, skiprows=skip, low_memory=False)
