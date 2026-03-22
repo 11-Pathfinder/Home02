@@ -733,6 +733,7 @@
 
             // Click on school point → popup
             map.on('click', 'school-points', (e) => {
+                e.preventDefault();
                 const feature = e.features[0];
                 const coords = feature.geometry.coordinates.slice();
                 const school = schoolsData.find(s => s.properties.urn == feature.properties.urn);
@@ -860,10 +861,13 @@
                         'icon-ignore-placement': true
                     }
                 });
+                // Ensure school points render above station icons for click priority
+                map.moveLayer('school-points');
                 console.log('Station layer added. Source features:', STATIONS_DATA.length, 'Layer:', map.getLayer('station-icons'));
 
                 // Click on station → popup
                 map.on('click', 'station-icons', (e) => {
+                    if (e.defaultPrevented) return;
                     const feature = e.features[0];
                     const coords = feature.geometry.coordinates.slice();
                     const props = feature.properties;
