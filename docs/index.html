@@ -702,6 +702,25 @@
                 data: { type: 'FeatureCollection', features: schoolsData }
             });
 
+            // Invisible hit-target layer (larger radius for easier tapping)
+            const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+            const hitMultiplier = isMobile ? 3.0 : 1.8;
+            map.addLayer({
+                id: 'school-hit-targets',
+                type: 'circle',
+                source: 'schools',
+                paint: {
+                    'circle-color': 'transparent',
+                    'circle-radius': [
+                        'interpolate', ['linear'], ['zoom'],
+                        9, 2 * hitMultiplier,
+                        13, 5 * hitMultiplier,
+                        16, 9 * hitMultiplier
+                    ],
+                    'circle-opacity': 0
+                }
+            });
+
             // Layer: school points with zoom-adaptive sizing
             map.addLayer({
                 id: 'school-points',
@@ -731,8 +750,8 @@
             renderMarkers();
             renderSchoolList();
 
-            // Click on school point → popup
-            map.on('click', 'school-points', (e) => {
+            // Click on school point or hit target → popup
+            function handleSchoolClick(e) {
                 e.preventDefault();
                 const feature = e.features[0];
                 const coords = feature.geometry.coordinates.slice();
@@ -741,13 +760,21 @@
                     showPopup(school, coords);
                     highlightSchoolInList(feature.properties.urn);
                 }
-            });
+            }
+            map.on('click', 'school-points', handleSchoolClick);
+            map.on('click', 'school-hit-targets', handleSchoolClick);
 
-            // Cursor changes on hover
+            // Cursor changes on hover (both layers)
             map.on('mouseenter', 'school-points', () => {
                 map.getCanvas().classList.add('pointer-cursor');
             });
             map.on('mouseleave', 'school-points', () => {
+                map.getCanvas().classList.remove('pointer-cursor');
+            });
+            map.on('mouseenter', 'school-hit-targets', () => {
+                map.getCanvas().classList.add('pointer-cursor');
+            });
+            map.on('mouseleave', 'school-hit-targets', () => {
                 map.getCanvas().classList.remove('pointer-cursor');
             });
 
@@ -861,7 +888,8 @@
                         'icon-ignore-placement': true
                     }
                 });
-                // Ensure school points render above station icons for click priority
+                // Ensure school layers render above station icons for click priority
+                map.moveLayer('school-hit-targets');
                 map.moveLayer('school-points');
                 console.log('Station layer added. Source features:', STATIONS_DATA.length, 'Layer:', map.getLayer('station-icons'));
 
