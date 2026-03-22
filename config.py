@@ -11,7 +11,9 @@ RATING_COLORS = {
     "Good": {"fill": "#3498db", "border": "#2980b9"},
     "Requires improvement": {"fill": "#e67e22", "border": "#d35400"},
     "Inadequate": {"fill": "#e74c3c", "border": "#c0392b"},
+    "New framework": {"fill": "#9b59b6", "border": "#8e44ad"},  # Purple - 2025 report card system
     "Not yet inspected": {"fill": "#95a5a6", "border": "#7f8c8d"},
+    "Independent": {"fill": "#8B4513", "border": "#5C2D0E"},
 }
 
 # All 33 London boroughs (32 boroughs + City of London)

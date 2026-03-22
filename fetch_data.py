@@ -1,9 +1,11 @@
 """Download school data from GIAS and Ofsted inspection outcomes."""
 
-import os
+import re
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pandas as pd
 import requests
 
 from config import GIAS_DOWNLOAD_URL
@@ -91,8 +93,6 @@ def download_ofsted_csv(force=False, manual_url=None):
     print("Fetching Ofsted Management Information page...")
     resp = requests.get(OFSTED_MI_PAGE, timeout=30)
     resp.raise_for_status()
-
-    import re
 
     # Extract all CSV links and their surrounding text for context
     # Pattern: capture link text and href together
@@ -196,6 +196,102 @@ def download_ofsted_csv(force=False, manual_url=None):
         print(f"  Try specifying the URL manually with --ofsted-url")
 
     return output_path
+
+
+def fetch_legacy_rating(urn):
+    """Fetch a school's current Ofsted rating from the Ofsted website.
+
+    Used for schools with "Standards maintained" outcomes where the legacy
+    rating isn't in the MI CSV data.
+
+    Returns:
+        str: Rating ('Outstanding', 'Good', etc.) or None if not found.
+    """
+    url = f"https://reports.ofsted.gov.uk/provider/21/{urn}"
+    try:
+        resp = requests.get(url, timeout=15)
+        if resp.status_code != 200:
+            return None
+
+        # The current rating has class "rating--selected"
+        match = re.search(
+            r'class="rating\s+rating--selected[^"]*"[^>]*>\s*<span>([^<]+)</span>',
+            resp.text,
+        )
+        if match:
+            rating = match.group(1).strip()
+            # Normalize rating names
+            rating_map = {
+                "Outstanding": "Outstanding",
+                "Good": "Good",
+                "Requires Improvement": "Requires improvement",
+                "Requires improvement": "Requires improvement",
+                "Inadequate": "Inadequate",
+            }
+            return rating_map.get(rating, rating)
+        return None
+    except requests.RequestException:
+        return None
+
+
+def fetch_legacy_ratings(urns, force=False, delay=0.2):
+    """Fetch legacy ratings for multiple schools from Ofsted website.
+
+    Caches results to data/legacy_ratings.csv to avoid re-fetching.
+
+    Args:
+        urns: List of URNs to fetch ratings for.
+        force: If True, re-fetch all ratings even if cached.
+        delay: Seconds to wait between requests (be nice to Ofsted servers).
+
+    Returns:
+        DataFrame with URN and OfstedRating columns.
+    """
+    ensure_data_dir()
+    cache_path = DATA_DIR / "legacy_ratings.csv"
+
+    # Load existing cache
+    cached = {}
+    if cache_path.exists() and not force:
+        df = pd.read_csv(cache_path)
+        cached = dict(zip(df["URN"].astype(int), df["OfstedRating"]))
+        print(f"  Loaded {len(cached)} cached legacy ratings")
+
+    # Find URNs that need fetching
+    urns_to_fetch = [u for u in urns if int(u) not in cached]
+
+    if not urns_to_fetch:
+        print("  All legacy ratings already cached")
+        return pd.DataFrame({"URN": list(cached.keys()), "OfstedRating": list(cached.values())})
+
+    print(f"  Fetching {len(urns_to_fetch)} legacy ratings from Ofsted website...")
+    fetched = 0
+    failed = 0
+
+    for i, urn in enumerate(urns_to_fetch):
+        rating = fetch_legacy_rating(urn)
+        if rating:
+            cached[int(urn)] = rating
+            fetched += 1
+        else:
+            failed += 1
+
+        # Progress update every 50 schools
+        if (i + 1) % 50 == 0:
+            print(f"    Progress: {i + 1}/{len(urns_to_fetch)} (fetched: {fetched}, failed: {failed})")
+
+        # Be nice to Ofsted servers
+        if delay > 0 and i < len(urns_to_fetch) - 1:
+            time.sleep(delay)
+
+    print(f"  Completed: {fetched} ratings fetched, {failed} not found")
+
+    # Save updated cache
+    result = pd.DataFrame({"URN": list(cached.keys()), "OfstedRating": list(cached.values())})
+    result.to_csv(cache_path, index=False)
+    print(f"  Saved {len(result)} legacy ratings to {cache_path}")
+
+    return result
 
 
 def fetch_all(force=False, ofsted_url=None):

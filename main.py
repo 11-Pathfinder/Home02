@@ -7,6 +7,7 @@ and generates an interactive HTML map with color-coded catchment areas.
 Usage:
     python3 main.py                  # Run full pipeline
     python3 main.py --refresh        # Force re-download of data
+    python3 main.py --refresh-legacy # Re-fetch legacy ratings from Ofsted website
     python3 main.py --radius 1000    # Custom catchment radius (meters)
     python3 main.py --output map.html  # Custom output file
     python3 main.py --check "Joseph Hood"  # Check a school's rating
@@ -29,6 +30,11 @@ def main():
         "--refresh",
         action="store_true",
         help="Force re-download of all data",
+    )
+    parser.add_argument(
+        "--refresh-legacy",
+        action="store_true",
+        help="Re-fetch legacy ratings from Ofsted website",
     )
     parser.add_argument(
         "--radius",
@@ -66,7 +72,7 @@ def main():
     print("\n" + "=" * 60)
     print("Step 2: Processing data...")
     print("=" * 60)
-    schools_df = process(gias_path, ofsted_path)
+    schools_df = process(gias_path, ofsted_path, refresh_legacy=args.refresh_legacy)
 
     # Step 3: Generate map
     print("\n" + "=" * 60)
@@ -99,7 +105,7 @@ def main():
         if ofsted_path and Path(ofsted_path).exists():
             import pandas as pd
             from process_data import load_ofsted_data
-            raw_ofsted = load_ofsted_data(ofsted_path)
+            raw_ofsted, _ = load_ofsted_data(ofsted_path)
             if raw_ofsted is not None:
                 for _, row in matches.iterrows():
                     urn = int(row["URN"])
