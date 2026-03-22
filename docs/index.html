@@ -816,25 +816,19 @@
                 ctx.strokeStyle = '#ccc';
                 ctx.lineWidth = size * 0.03;
                 ctx.stroke();
-                // Double-arrow: two filled interlocking arrowheads
+                // Official NR double-arrow SVG path rendered via Path2D
+                // Original viewBox: 9 25 73 32 — scale to fit inside circle
+                const arrowW = 73, arrowH = 32;
+                const scale = (r * 1.5) / arrowW;
+                const offsetX = cx - (arrowW * scale) / 2 - 9 * scale;
+                const offsetY = cy - (arrowH * scale) / 2 - 25 * scale;
+                ctx.save();
+                ctx.translate(offsetX, offsetY);
+                ctx.scale(scale, scale);
+                const p = new Path2D('M25.8 25.7 l20.5 9.4 h-31.8 v6.4 h32 l-15.6 7.5 h-16.4 v6.3 h16.4 l19.5 9.4 h14.6 l-20.5-9.4 h31.9 v-6.3 h-31.9 l15.6-7.6 h16.3 v-6.4 h-16.4 l-19.5-9.4Z');
                 ctx.fillStyle = '#E1251B';
-                const hw = size * 0.22; // half-width of arrow
-                const hh = size * 0.13; // half-height of each arrow
-                const gap = size * 0.04; // vertical offset for interlocking
-                // Right-pointing arrow (upper)
-                ctx.beginPath();
-                ctx.moveTo(cx - hw, cy - gap - hh);
-                ctx.lineTo(cx + hw, cy - gap);
-                ctx.lineTo(cx - hw, cy - gap + hh);
-                ctx.closePath();
-                ctx.fill();
-                // Left-pointing arrow (lower)
-                ctx.beginPath();
-                ctx.moveTo(cx + hw, cy + gap - hh);
-                ctx.lineTo(cx - hw, cy + gap);
-                ctx.lineTo(cx + hw, cy + gap + hh);
-                ctx.closePath();
-                ctx.fill();
+                ctx.fill(p);
+                ctx.restore();
                 return { width: size, height: size, data: ctx.getImageData(0, 0, size, size).data };
             }
 
