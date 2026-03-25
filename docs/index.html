@@ -6,6 +6,8 @@
     <title>London Primary Schools - Catchment Map</title>
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/@mapbox/mapbox-gl-draw@1.4.3/dist/mapbox-gl-draw.js"></script>
+    <link href="https://unpkg.com/@mapbox/mapbox-gl-draw@1.4.3/dist/mapbox-gl-draw.css" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
@@ -502,6 +504,112 @@
                 bottom: 140px;
             }
         }
+
+        /* Draw boundary panel */
+        #boundary-panel {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 360px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            z-index: 30;
+            font-family: 'Inter', sans-serif;
+        }
+
+        #boundary-panel.visible {
+            display: block;
+        }
+
+        .boundary-panel-header {
+            padding: 14px 16px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .boundary-panel-header h3 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin: 0;
+        }
+
+        .boundary-panel-body {
+            padding: 12px 16px;
+        }
+
+        .boundary-panel-body textarea {
+            width: 100%;
+            height: 120px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.75rem;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 10px;
+            resize: vertical;
+            color: #333;
+            background: #f8f9fa;
+        }
+
+        .boundary-panel-body textarea:focus {
+            outline: none;
+            border-color: #4285f4;
+        }
+
+        .boundary-panel-actions {
+            padding: 10px 16px 14px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-boundary {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid #dee2e6;
+            background: white;
+            color: #495057;
+            transition: all 0.15s;
+        }
+
+        .btn-boundary:hover {
+            background: #f8f9fa;
+        }
+
+        .btn-boundary.primary {
+            background: #4285f4;
+            color: white;
+            border-color: #4285f4;
+        }
+
+        .btn-boundary.primary:hover {
+            background: #3367d6;
+        }
+
+        .btn-boundary.danger {
+            color: #dc3545;
+            border-color: #dc3545;
+        }
+
+        .btn-boundary.danger:hover {
+            background: #dc3545;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            #boundary-panel {
+                bottom: 140px;
+                right: 10px;
+                left: 10px;
+                width: auto;
+            }
+        }
     </style>
 </head>
 <body>
@@ -562,6 +670,13 @@
                     </span>
                     Show Religious Schools
                 </label>
+                <label class="toggle-item">
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="toggle-draw">
+                        <span class="toggle-slider"></span>
+                    </span>
+                    Draw Search Area
+                </label>
             </div>
 
             <div class="school-list-header">
@@ -576,6 +691,19 @@
         </aside>
 
         <div id="map"></div>
+
+        <div id="boundary-panel">
+            <div class="boundary-panel-header">
+                <h3>Search Area Boundary</h3>
+            </div>
+            <div class="boundary-panel-body">
+                <textarea id="boundary-output" readonly placeholder="Draw a polygon on the map to generate boundary coordinates..."></textarea>
+            </div>
+            <div class="boundary-panel-actions">
+                <button class="btn-boundary primary" id="btn-copy-boundary">Copy YAML</button>
+                <button class="btn-boundary danger" id="btn-clear-boundary">Clear</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1156,6 +1284,98 @@
         document.getElementById('map').addEventListener('click', () => {
             if (window.innerWidth <= 768) {
                 sidebar.classList.remove('expanded');
+            }
+        });
+
+        // --- Draw Search Area ---
+        const draw = new MapboxDraw({
+            displayControlsDefault: false,
+            controls: {},
+            defaultMode: 'simple_select',
+            styles: [
+                // Polygon fill
+                { id: 'draw-polygon-fill', type: 'fill', filter: ['==', '$type', 'Polygon'],
+                  paint: { 'fill-color': '#4285f4', 'fill-opacity': 0.15 } },
+                // Polygon outline
+                { id: 'draw-polygon-stroke', type: 'line', filter: ['==', '$type', 'Polygon'],
+                  paint: { 'line-color': '#4285f4', 'line-width': 2, 'line-dasharray': [3, 2] } },
+                // Vertices
+                { id: 'draw-vertex', type: 'circle', filter: ['==', 'meta', 'vertex'],
+                  paint: { 'circle-radius': 5, 'circle-color': '#4285f4', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } },
+                // Midpoints
+                { id: 'draw-midpoint', type: 'circle', filter: ['==', 'meta', 'midpoint'],
+                  paint: { 'circle-radius': 3, 'circle-color': '#4285f4' } },
+                // Active line while drawing
+                { id: 'draw-line', type: 'line', filter: ['==', '$type', 'LineString'],
+                  paint: { 'line-color': '#4285f4', 'line-width': 2, 'line-dasharray': [3, 2] } }
+            ]
+        });
+        map.addControl(draw);
+
+        let drawActive = false;
+        const boundaryPanel = document.getElementById('boundary-panel');
+        const boundaryOutput = document.getElementById('boundary-output');
+
+        function updateBoundaryOutput() {
+            const data = draw.getAll();
+            const polygons = data.features.filter(f => f.geometry.type === 'Polygon');
+            if (polygons.length === 0) {
+                boundaryOutput.value = '';
+                boundaryPanel.classList.remove('visible');
+                return;
+            }
+            // Use the last drawn polygon
+            const coords = polygons[polygons.length - 1].geometry.coordinates[0];
+            // Remove the closing point (duplicate of first) and format as YAML
+            const points = coords.slice(0, -1);
+            const yaml = '    boundary:\n' + points.map(c =>
+                `      - [${c[0].toFixed(4)}, ${c[1].toFixed(4)}]`
+            ).join('\n');
+            boundaryOutput.value = yaml;
+            boundaryPanel.classList.add('visible');
+        }
+
+        map.on('draw.create', updateBoundaryOutput);
+        map.on('draw.update', updateBoundaryOutput);
+        map.on('draw.delete', updateBoundaryOutput);
+
+        // Toggle draw mode
+        document.getElementById('toggle-draw').addEventListener('change', (e) => {
+            drawActive = e.target.checked;
+            if (drawActive) {
+                // Delete any existing polygons — one boundary at a time
+                draw.deleteAll();
+                draw.changeMode('draw_polygon');
+                boundaryPanel.classList.add('visible');
+                boundaryOutput.value = '';
+                boundaryOutput.placeholder = 'Click on the map to draw your search area polygon...';
+            } else {
+                draw.changeMode('simple_select');
+                draw.deleteAll();
+                boundaryPanel.classList.remove('visible');
+            }
+        });
+
+        // Copy YAML to clipboard
+        document.getElementById('btn-copy-boundary').addEventListener('click', () => {
+            const text = boundaryOutput.value;
+            if (!text) return;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById('btn-copy-boundary');
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = 'Copy YAML'; }, 2000);
+            });
+        });
+
+        // Clear drawn boundary
+        document.getElementById('btn-clear-boundary').addEventListener('click', () => {
+            draw.deleteAll();
+            boundaryOutput.value = '';
+            if (drawActive) {
+                draw.changeMode('draw_polygon');
+                boundaryOutput.placeholder = 'Click on the map to draw your search area polygon...';
+            } else {
+                boundaryPanel.classList.remove('visible');
             }
         });
     </script>
